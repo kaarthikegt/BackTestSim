@@ -14,7 +14,7 @@ def main():
     # TODO: Locate time discrepancy and determine cause for non linear time consumption for linearly scaled loads
 
     for i in range(backtest_count):
-        signal_backtest(user_id=user_id, strategy_id=strategy_id, execution_mode=EM_RABBITMQ, kwargs={"period": 500})
+        signal_backtest(user_id=user_id, strategy_id=strategy_id, execution_mode=EM_SYNCHRONOUS, kwargs={"period": 30})
 
     try:
         while not is_finished:

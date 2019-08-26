@@ -2,8 +2,7 @@ import json
 from random import randint
 from noise import pnoise3
 from time import time, sleep
-from selenium import webdriver
-from bs4 import BeautifulSoup, SoupStrainer
+
 from multiprocessing import Process, Manager
 
 symbol_list_cache = None
@@ -96,130 +95,7 @@ def assure_init_data():
     except KeyError as e:
         print("Symbol Data Corrupted!")
 
-    # No cached symbol data available, Fetching Symbol Data
-    print("Fetching Symbol Data")
-
-    symbols = fetch_symbol_list()
-    symbols_count = len(symbols)
-
-    batches = 4
-    batch_data = []
-
-    manager = Manager()
-
-    batch_status = manager.list()
-
-    for i in range(batches):
-        batch_status.append(0)
-
-    cur_sublist = None
-
-    for i in range(len(symbols)):
-        if i % int(symbols_count / batches) == 0:
-            batch_data.append([])
-            cur_sublist = batch_data[len(batch_data) - 1]
-        cur_sublist.append(symbols[i])
-
-    ps = []
-
-    for batch_index in range(batches):
-        d = batch_data[batch_index]
-        p = Process(target=_fetch_data, args=(d, batch_index, batch_status))
-        p.start()
-        ps.append(p)
-
-    sleep(5)
-
-    is_processing = True
-
-    while is_processing:
-        is_processing = False
-        for batch_index in range(batches):
-            prog = batch_status[batch_index] * 100
-            print(f"Batch Progress: {prog}% complete for batch {batch_index}")
-
-            if prog < 100:
-                is_processing = True
-
-        print("\n")
-
-        try:
-            sleep(3)
-        except KeyboardInterrupt as e:
-            exit(0)
-
-    for batch_index in range(batches):
-        ps[batch_index].join()
-
-    print("Finished Fetching Symbol Data")
-
-    packed_data = {"price_data": init_prices[0].copy(), "volume_data": init_volumes[0].copy()}
-
-    # Save data
-    with open("symbol_data", "w") as f:
-        json.dump(packed_data, f)
-
-    print("Returning Web-Scraped Data")
     return init_prices, init_volumes
-
-
-def _fetch_data(symbols, batch_index, batch_status):
-    global init_prices, init_volumes
-
-    if not init_prices or not init_volumes:
-        print("init_prices and/or init_volumes not properly instantiated. Exiting")
-        quit(0)
-
-    symbols_count = len(symbols)
-    print("Starting Batch:", batch_index, " Batch Size:", symbols_count)
-    options = webdriver.ChromeOptions()
-    options.add_argument('headless')
-    options.add_experimental_option('prefs', {'profile.managed_default_content_settings.images': 2})
-
-    try:
-        driver = webdriver.Chrome('chromedriver', chrome_options=options)
-    except KeyboardInterrupt as e:
-        quit(0)
-
-    try:
-        for s_index in range(symbols_count):
-            s = symbols[s_index]
-
-            url = "finance.yahoo.com/quote/" + s
-
-            driver.get("http://" + url)
-
-            r = driver.page_source
-
-            data = BeautifulSoup(r, "html.parser", parse_only=SoupStrainer("span"))
-
-            price_tag = data.find("span", {"class": "Trsdu(0.3s) Fw(b) Fz(36px) Mb(-4px) D(ib)", "data-reactid": 52})
-            volume_tag = data.find("span", {"class": "Trsdu(0.3s)", "data-reactid": 72})
-
-            price = None
-            volume = None
-
-            if price_tag:
-                price = float(price_tag.text.replace(',', ''))
-
-            if volume_tag:
-                volume = int(volume_tag.text.replace(',', ''))
-
-            if not price:
-                price = gen_price(0, s_index)
-
-            if not volume:
-                volume = gen_volume()
-
-            init_prices[0][s] = price
-            init_volumes[0][s] = volume
-            batch_status[batch_index] = (s_index + 1) / symbols_count
-            sleep(1)
-
-        driver.close()
-    except KeyboardInterrupt as e:
-        driver.quit()
-        quit(0)
 
 
 # Overwrite Mode: Each period overwrites the previous periods data
